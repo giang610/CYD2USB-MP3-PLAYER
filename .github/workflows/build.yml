@@ -1,6 +1,5 @@
 # ============================================================
-#  GitHub Actions — Tự động build CYD2USB MP3 Player
-#  Trigger: push hoặc pull_request vào nhánh main
+#  GitHub Actions — Build CYD2USB MP3 Player
 # ============================================================
 name: Build ESP32 Firmware
 
@@ -9,7 +8,7 @@ on:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
-  workflow_dispatch:   # Cho phép chạy thủ công từ GitHub UI
+  workflow_dispatch:
 
 jobs:
   build:
@@ -17,71 +16,60 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # 1. Checkout code
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # 2. Cài Arduino CLI
       - name: Install Arduino CLI
         uses: arduino/setup-arduino-cli@v2
 
-      # 3. Khởi tạo config và thêm board ESP32
       - name: Initialize Arduino CLI config
         run: |
           arduino-cli config init
           arduino-cli config add board_manager.additional_urls \
             https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 
-      # 4. Cập nhật index board
       - name: Update board index
         run: arduino-cli core update-index
 
-      # 5. Cài ESP32 core (Espressif)
       - name: Install ESP32 core
         run: arduino-cli core install esp32:esp32
 
-      # 6. Cài các thư viện cần thiết
       - name: Install libraries
         run: |
           arduino-cli lib install "TFT_eSPI"
           arduino-cli lib install "XPT2046_Touchscreen"
           arduino-cli lib install "ESP8266Audio"
 
-      # 7. Patch User_Setup.h cho CYD2USB (ILI9341)
-      #    TFT_eSPI cần file này đúng trước khi compile
       - name: Patch TFT_eSPI User_Setup.h for CYD2USB
         run: |
-          SETUP_FILE=$(find /root/Arduino/libraries/TFT_eSPI -name "User_Setup.h" | head -1)
+          SETUP_FILE=$(find $HOME -name "User_Setup.h" -path "*/TFT_eSPI/*" 2>/dev/null | head -1)
           echo "Patching: $SETUP_FILE"
-          cat > "$SETUP_FILE" << 'EOF'
-          // CYD2USB (ESP32-2432S028) — ILI9341 2.8"
-          #define USER_SETUP_INFO "CYD2USB ILI9341"
+          tee "$SETUP_FILE" > /dev/null << 'HEREDOC'
+// CYD2USB (ESP32-2432S028) — ILI9341 2.8"
+#define USER_SETUP_INFO "CYD2USB ILI9341"
+#define ILI9341_DRIVER
+#define TFT_MISO 12
+#define TFT_MOSI 13
+#define TFT_SCLK 14
+#define TFT_CS   15
+#define TFT_DC    2
+#define TFT_RST  -1
+#define TOUCH_CS 33
+#define LOAD_GLCD
+#define LOAD_FONT2
+#define LOAD_FONT4
+#define LOAD_FONT6
+#define LOAD_FONT7
+#define LOAD_FONT8
+#define LOAD_GFXFF
+#define SMOOTH_FONT
+#define SPI_FREQUENCY       40000000
+#define SPI_READ_FREQUENCY  20000000
+#define SPI_TOUCH_FREQUENCY  2500000
+HEREDOC
+          echo "Patch OK!"
+          head -3 "$SETUP_FILE"
 
-          #define ILI9341_DRIVER
-
-          #define TFT_MISO 12
-          #define TFT_MOSI 13
-          #define TFT_SCLK 14
-          #define TFT_CS   15
-          #define TFT_DC    2
-          #define TFT_RST  -1
-          #define TOUCH_CS 33
-
-          #define LOAD_GLCD
-          #define LOAD_FONT2
-          #define LOAD_FONT4
-          #define LOAD_FONT6
-          #define LOAD_FONT7
-          #define LOAD_FONT8
-          #define LOAD_GFXFF
-          #define SMOOTH_FONT
-
-          #define SPI_FREQUENCY       40000000
-          #define SPI_READ_FREQUENCY  20000000
-          #define SPI_TOUCH_FREQUENCY  2500000
-          EOF
-
-      # 8. Compile sketch
       - name: Compile sketch
         run: |
           arduino-cli compile \
@@ -89,11 +77,7 @@ jobs:
             --output-dir ./build \
             --export-binaries \
             ./CYD_MP3_Player/CYD_MP3_Player.ino
-        env:
-          ARDUINO_BOARD_MANAGER_ADDITIONAL_URLS: >
-            https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 
-      # 9. Upload file .bin lên GitHub Artifacts (tải về được)
       - name: Upload firmware artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -101,23 +85,15 @@ jobs:
           path: |
             ./build/*.bin
             ./build/*.elf
-          retention-days: 30   # Giữ file trong 30 ngày
+          retention-days: 30
 
-      # 10. (Tùy chọn) Tạo Release tự động khi push tag vx.x.x
       - name: Create GitHub Release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: |
-            ./build/*.bin
+          files: ./build/*.bin
           body: |
             ## 🎵 CYD2USB MP3 Player Firmware
-            
-            ### Cách nạp firmware:
-            1. Tải file `.bin` về máy
-            2. Dùng [ESP32 Flash Download Tool](https://www.espressif.com/en/support/download/other-tools)
-               hoặc lệnh: `esptool.py write_flash 0x10000 CYD_MP3_Player.ino.bin`
-            
-            ### Board: ESP32-2432S028 (CYD2USB)
+            Nạp: `esptool.py write_flash 0x10000 CYD_MP3_Player.ino.bin`
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
