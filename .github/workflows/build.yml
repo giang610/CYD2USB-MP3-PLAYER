@@ -45,7 +45,7 @@ jobs:
           SETUP_FILE=$(find $HOME -name "User_Setup.h" -path "*/TFT_eSPI/*" 2>/dev/null | head -1)
           echo "Patching: $SETUP_FILE"
           tee "$SETUP_FILE" > /dev/null << 'HEREDOC'
-// CYD2USB (ESP32-2432S028) — ILI9341 2.8"
+// CYD2USB 
 #define USER_SETUP_INFO "CYD2USB ILI9341"
 #define ILI9341_DRIVER
 #define TFT_MISO 12
