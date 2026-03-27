@@ -1,99 +1,28 @@
-# ============================================================
-#  GitHub Actions — Build CYD2USB MP3 Player
-# ============================================================
 name: Build ESP32 Firmware
-
 on:
   push:
     branches: [ main, master ]
-  pull_request:
-    branches: [ main, master ]
   workflow_dispatch:
-
 jobs:
   build:
-    name: Compile with Arduino CLI
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Install Arduino CLI
-        uses: arduino/setup-arduino-cli@v2
-
-      - name: Initialize Arduino CLI config
+      - uses: actions/checkout@v4
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Setup
         run: |
           arduino-cli config init
-          arduino-cli config add board_manager.additional_urls \
-            https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
-
-      - name: Update board index
-        run: arduino-cli core update-index
-
-      - name: Install ESP32 core
-        run: arduino-cli core install esp32:esp32
-
-      - name: Install libraries
+          arduino-cli config add board_manager.additional_urls https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+          arduino-cli core update-index
+          arduino-cli core install esp32:esp32
+          arduino-cli lib install "TFT_eSPI" "XPT2046_Touchscreen" "ESP8266Audio"
+      - name: Copy User_Setup.h
         run: |
-          arduino-cli lib install "TFT_eSPI"
-          arduino-cli lib install "XPT2046_Touchscreen"
-          arduino-cli lib install "ESP8266Audio"
-
-      - name: Patch TFT_eSPI User_Setup.h for CYD2USB
-        run: |
-          SETUP_FILE=$(find $HOME -name "User_Setup.h" -path "*/TFT_eSPI/*" 2>/dev/null | head -1)
-          echo "Patching: $SETUP_FILE"
-          tee "$SETUP_FILE" > /dev/null << 'HEREDOC'
-// CYD2USB 
-#define USER_SETUP_INFO "CYD2USB ILI9341"
-#define ILI9341_DRIVER
-#define TFT_MISO 12
-#define TFT_MOSI 13
-#define TFT_SCLK 14
-#define TFT_CS   15
-#define TFT_DC    2
-#define TFT_RST  -1
-#define TOUCH_CS 33
-#define LOAD_GLCD
-#define LOAD_FONT2
-#define LOAD_FONT4
-#define LOAD_FONT6
-#define LOAD_FONT7
-#define LOAD_FONT8
-#define LOAD_GFXFF
-#define SMOOTH_FONT
-#define SPI_FREQUENCY       40000000
-#define SPI_READ_FREQUENCY  20000000
-#define SPI_TOUCH_FREQUENCY  2500000
-HEREDOC
-          echo "Patch OK!"
-          head -3 "$SETUP_FILE"
-
-      - name: Compile sketch
-        run: |
-          arduino-cli compile \
-            --fqbn esp32:esp32:esp32 \
-            --output-dir ./build \
-            --export-binaries \
-            ./CYD_MP3_Player/CYD_MP3_Player.ino
-
-      - name: Upload firmware artifacts
-        uses: actions/upload-artifact@v4
+          F=$(find $HOME -name "User_Setup.h" -path "*/TFT_eSPI/*" | head -1)
+          cp ./User_Setup.h "$F"
+      - name: Compile
+        run: arduino-cli compile --fqbn esp32:esp32:esp32 --output-dir ./build --export-binaries ./CYD_MP3_Player/CYD_MP3_Player.ino
+      - uses: actions/upload-artifact@v4
         with:
-          name: CYD-MP3-Player-firmware
-          path: |
-            ./build/*.bin
-            ./build/*.elf
-          retention-days: 30
-
-      - name: Create GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
-        uses: softprops/action-gh-release@v2
-        with:
-          files: ./build/*.bin
-          body: |
-            ## 🎵 CYD2USB MP3 Player Firmware
-            Nạp: `esptool.py write_flash 0x10000 CYD_MP3_Player.ino.bin`
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          name: firmware
+          path: ./build/*.bin
