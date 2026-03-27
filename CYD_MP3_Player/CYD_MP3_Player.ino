@@ -221,7 +221,7 @@ void setup() {
 
   // ── Màn hình ──
   tft.init();
-  tft.setRotation(1);
+  tft.setRotation(0);
   tft.invertDisplay(true);   // BẮT BUỘC với CYD2USB!
   tft.fillScreen(COLOR_BG);
 
@@ -237,7 +237,7 @@ void setup() {
 
   // ── Cảm ứng ──
   ts.begin();
-  ts.setRotation(1);
+  ts.setRotation(0);
   drawBoot("Touch OK");
 
   // ── SD Card ──
